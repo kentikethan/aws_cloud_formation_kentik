@@ -1,0 +1,142 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Kentik Metadata Collection - Standard Account Configuration.
+  Deploys the IAM policy and role in a single AWS account for the Kentik
+  standard IAM architecture. Kentik connects directly to each account
+  using this role — no hub account required.
+  Deploy this template independently in every account you want Kentik to monitor.
+  Reference: https://kb.kentik.com/docs/metadata-configuration-aws#standard-configuration
+
+# ---------------------------------------------------------------------------
+# Parameters
+# ---------------------------------------------------------------------------
+Parameters:
+  KentikCompanyID:
+    Type: String
+    Description: >
+      Your Kentik Company ID (the "Account #" found under Settings > Licenses
+      in the Kentik portal). Used as the ExternalId in the role trust policy.
+    AllowedPattern: ".+"
+    ConstraintDescription: KentikCompanyID must not be empty.
+
+  PolicyName:
+    Type: String
+    Default: KentikMetadataPolicy
+    Description: Name of the IAM policy to create in this account.
+
+  RoleName:
+    Type: String
+    Default: KentikMetadataRole
+    Description: Name of the IAM role to create in this account.
+
+  S3BucketName:
+    Type: String
+    Default: ""
+    Description: >
+      (Optional) Name of an S3 bucket in this account that Kentik may need
+      access to (e.g. for VPC Flow Logs). Leave empty to skip S3 permissions.
+
+# ---------------------------------------------------------------------------
+# Conditions
+# ---------------------------------------------------------------------------
+Conditions:
+  HasS3Bucket: !Not [!Equals [!Ref S3BucketName, ""]]
+
+# ---------------------------------------------------------------------------
+# Resources
+# ---------------------------------------------------------------------------
+Resources:
+
+  # ---- IAM Policy ---------------------------------------------------------
+  KentikMetadataPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Ref PolicyName
+      Description: >-
+        Grants Kentik read-only access to AWS metadata: EC2, CloudWatch,
+        DirectConnect, ELB, Network Firewall, Network Manager, and IAM aliases.
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: KentikMetadataReadOnly
+            Effect: Allow
+            Action:
+              - cloudwatch:ListMetrics
+              - cloudwatch:GetMetricStatistics
+              - cloudwatch:GetMetricData
+              - cloudwatch:Describe*
+              - directconnect:List*
+              - directconnect:Describe*
+              - ec2:Describe*
+              - ec2:Search*
+              - ec2:GetManagedPrefixListEntries
+              - elasticloadbalancing:Describe*
+              - iam:ListAccountAliases
+              - network-firewall:Describe*
+              - network-firewall:List*
+              - networkmanager:ListCoreNetworks
+              - networkmanager:GetCoreNetwork
+              - networkmanager:GetCoreNetworkPolicy
+              - networkmanager:ListAttachments
+              - networkmanager:GetNetworkRoutes
+              - organizations:ListAccounts
+            Resource: "*"
+          - !If
+            - HasS3Bucket
+            - Sid: KentikS3Access
+              Effect: Allow
+              Action:
+                - s3:Get*
+                - s3:List*
+              Resource:
+                - !Sub "arn:aws:s3:::${S3BucketName}"
+                - !Sub "arn:aws:s3:::${S3BucketName}/*"
+            - !Ref AWS::NoValue
+
+  # ---- IAM Role -----------------------------------------------------------
+  KentikMetadataRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      Description: >-
+        Assumed directly by Kentik's AWS account to collect metadata from
+        this account. No hub account is involved.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: KentikTrust
+            Effect: Allow
+            Principal:
+              AWS: arn:aws:iam::834693425129:root
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref KentikCompanyID
+              ArnEquals:
+                aws:PrincipalArn: arn:aws:iam::834693425129:role/eks-ingest-node
+      ManagedPolicyArns:
+        - !Ref KentikMetadataPolicy
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+Outputs:
+  RoleArn:
+    Description: >
+      ARN of the Kentik role. Enter this in the Kentik portal when configuring
+      the AWS integration for this account.
+    Value: !GetAtt KentikMetadataRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-RoleArn"
+
+  RoleName:
+    Description: Name of the Kentik IAM role.
+    Value: !Ref KentikMetadataRole
+    Export:
+      Name: !Sub "${AWS::StackName}-RoleName"
+
+  AccountId:
+    Description: AWS Account ID where this stack was deployed.
+    Value: !Ref AWS::AccountId
+    Export:
+      Name: !Sub "${AWS::StackName}-AccountId"

@@ -1,0 +1,103 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Kentik Metadata Collection - Hub (Primary) Account Setup.
+  Deploys the IAM policy and role in the primary/hub account for the Kentik
+  nested IAM architecture. Kentik assumes this role, which in turn assumes
+  secondary roles in spoke accounts.
+  Reference: https://kb.kentik.com/docs/metadata-configuration-aws
+
+# ---------------------------------------------------------------------------
+# Parameters
+# ---------------------------------------------------------------------------
+Parameters:
+  KentikCompanyID:
+    Type: String
+    Description: >
+      Your Kentik Company ID (the "Account #" found under Settings > Licenses
+      in the Kentik portal). Used as the ExternalId for the trust relationship.
+    AllowedPattern: ".+"
+    ConstraintDescription: KentikCompanyID must not be empty.
+
+  PrimaryPolicyName:
+    Type: String
+    Default: KentikMetadataPrimaryPolicy
+    Description: Name of the IAM policy to create in the hub account.
+
+  PrimaryRoleName:
+    Type: String
+    Default: KentikMetadataPrimaryRole
+    Description: Name of the IAM role to create in the hub account.
+
+# ---------------------------------------------------------------------------
+# Resources
+# ---------------------------------------------------------------------------
+Resources:
+
+  # ---- IAM Policy ---------------------------------------------------------
+  KentikPrimaryPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Ref PrimaryPolicyName
+      Description: >-
+        Allows Kentik's primary role to assume secondary roles in spoke accounts
+        and list AWS Organization accounts.
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AssumeSecondaryRoles
+            Effect: Allow
+            Action: sts:AssumeRole
+            Resource: "*"
+          - Sid: OrgListing
+            Effect: Allow
+            Action:
+              - organizations:ListAccounts
+            Resource: "*"
+
+  # ---- IAM Role -----------------------------------------------------------
+  KentikPrimaryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref PrimaryRoleName
+      Description: >-
+        Assumed by Kentik's AWS account to collect metadata. This role assumes
+        secondary roles in spoke accounts.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: KentikTrust
+            Effect: Allow
+            Principal:
+              AWS: arn:aws:iam::834693425129:root
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref KentikCompanyID
+              ArnEquals:
+                aws:PrincipalArn: arn:aws:iam::834693425129:role/eks-ingest-node
+      ManagedPolicyArns:
+        - !Ref KentikPrimaryPolicy
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+Outputs:
+  PrimaryRoleArn:
+    Description: >
+      ARN of the Kentik primary role. Provide this to Kentik when configuring
+      the integration in the portal.
+    Value: !GetAtt KentikPrimaryRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-PrimaryRoleArn"
+
+  PrimaryRoleName:
+    Description: Name of the Kentik primary IAM role.
+    Value: !Ref KentikPrimaryRole
+    Export:
+      Name: !Sub "${AWS::StackName}-PrimaryRoleName"
+
+  HubAccountId:
+    Description: AWS Account ID of this hub account (needed when deploying spoke template).
+    Value: !Ref AWS::AccountId
+    Export:
+      Name: !Sub "${AWS::StackName}-HubAccountId"

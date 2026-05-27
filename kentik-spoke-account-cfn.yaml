@@ -1,0 +1,133 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Kentik Metadata Collection - Spoke (Secondary) Account Setup.
+  Deploys the IAM policy and role in each secondary/spoke account for the
+  Kentik nested IAM architecture. The hub account's primary role assumes this
+  role to collect metadata.
+
+  Deploy this template via CloudFormation StackSets targeting all spoke
+  accounts in your organization (or a specific OU/account list).
+  Reference: https://kb.kentik.com/docs/metadata-configuration-aws
+
+# ---------------------------------------------------------------------------
+# Parameters
+# ---------------------------------------------------------------------------
+Parameters:
+  HubAccountId:
+    Type: String
+    Description: >
+      AWS Account ID of the Kentik hub (primary) account. The spoke role's
+      trust policy will allow this account to assume the secondary role.
+    AllowedPattern: "^[0-9]{12}$"
+    ConstraintDescription: Must be a valid 12-digit AWS account ID.
+
+  SecondaryPolicyName:
+    Type: String
+    Default: KentikMetadataSecondaryPolicy
+    Description: Name of the IAM policy to create in each spoke account.
+
+  SecondaryRoleName:
+    Type: String
+    Default: KentikMetadataSecondaryRole
+    Description: Name of the IAM role to create in each spoke account.
+
+  S3BucketName:
+    Type: String
+    Default: ""
+    Description: >
+      (Optional) Name of the S3 bucket in this account that Kentik may need
+      access to (e.g. for VPC Flow Logs). Leave empty to skip S3 permissions.
+
+# ---------------------------------------------------------------------------
+# Conditions
+# ---------------------------------------------------------------------------
+Conditions:
+  HasS3Bucket: !Not [!Equals [!Ref S3BucketName, ""]]
+
+# ---------------------------------------------------------------------------
+# Resources
+# ---------------------------------------------------------------------------
+Resources:
+
+  # ---- IAM Policy ---------------------------------------------------------
+  KentikSecondaryPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Ref SecondaryPolicyName
+      Description: >-
+        Grants Kentik read-only access to AWS metadata: EC2, CloudWatch,
+        DirectConnect, ELB, Network Firewall, Network Manager, and IAM aliases.
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: KentikMetadataReadOnly
+            Effect: Allow
+            Action:
+              - cloudwatch:ListMetrics
+              - cloudwatch:GetMetricStatistics
+              - cloudwatch:GetMetricData
+              - cloudwatch:Describe*
+              - directconnect:List*
+              - directconnect:Describe*
+              - ec2:Describe*
+              - ec2:Search*
+              - ec2:GetManagedPrefixListEntries
+              - elasticloadbalancing:Describe*
+              - iam:ListAccountAliases
+              - network-firewall:Describe*
+              - network-firewall:List*
+              - networkmanager:ListCoreNetworks
+              - networkmanager:GetCoreNetwork
+              - networkmanager:GetCoreNetworkPolicy
+              - networkmanager:ListAttachments
+              - networkmanager:GetNetworkRoutes
+              - organizations:ListAccounts
+            Resource: "*"
+          # S3 statement is only included when a bucket name is provided
+          - !If
+            - HasS3Bucket
+            - Sid: KentikS3Access
+              Effect: Allow
+              Action:
+                - s3:Get*
+                - s3:List*
+              Resource:
+                - !Sub "arn:aws:s3:::${S3BucketName}"
+                - !Sub "arn:aws:s3:::${S3BucketName}/*"
+            - !Ref AWS::NoValue
+
+  # ---- IAM Role -----------------------------------------------------------
+  KentikSecondaryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref SecondaryRoleName
+      Description: >-
+        Assumed by the Kentik hub account's primary role to collect metadata
+        from this spoke account.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: AllowHubAccountAssume
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${HubAccountId}:root"
+            Action: sts:AssumeRole
+            Condition: {}
+      ManagedPolicyArns:
+        - !Ref KentikSecondaryPolicy
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+Outputs:
+  SecondaryRoleArn:
+    Description: ARN of the Kentik secondary role created in this spoke account.
+    Value: !GetAtt KentikSecondaryRole.Arn
+
+  SecondaryRoleName:
+    Description: Name of the Kentik secondary IAM role.
+    Value: !Ref KentikSecondaryRole
+
+  SpokeAccountId:
+    Description: AWS Account ID of this spoke account.
+    Value: !Ref AWS::AccountId
