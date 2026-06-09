@@ -151,6 +151,53 @@ aws cloudformation create-stack-instances \
 
 ---
 
+## Nested Accounts (Non-Org Account)
+
+Use this when you are deploying the hub/spoke architecture but the **hub account is not the AWS Organizations management account**. By default, `organizations:ListAccounts` can only be called from the management account. This step grants the hub account permission to assume a role in the management account that performs the listing.
+
+If your hub account **is** the management account, skip this section entirely.
+
+### Prerequisites
+
+- AWS CLI configured with credentials for the **management account**
+- The hub account ID from the Step 1 stack outputs
+
+### Step 3 — Deploy to the Management Account
+
+Run this once in your AWS Organizations management account:
+
+```bash
+aws cloudformation deploy \
+  --template-file kentik-org-account-cfn.yaml \
+  --stack-name kentik-metadata-org \
+  --parameter-overrides HubAccountId=<hub-account-id> \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --region us-east-1
+```
+
+After deployment, grab the org role ARN from the stack outputs:
+
+```bash
+aws cloudformation describe-stacks \
+  --stack-name kentik-metadata-org \
+  --query "Stacks[0].Outputs"
+```
+
+Provide the `OrgRoleArn` to Kentik when configuring the integration so the hub role can assume it to list accounts.
+
+### How It Works
+
+The template creates a role in the management account whose trust policy allows any principal **from the hub account** to assume it (scoped by `aws:PrincipalAccount` condition). The hub account's primary role already has `sts:AssumeRole: *`, so no changes to the hub stack are needed.
+
+### Resources Created
+
+| Template | Resource | Purpose |
+|---|---|---|
+| Org | `KentikMetadataOrgPolicy` | Grants `organizations:ListAccounts` in the management account |
+| Org | `KentikMetadataOrgRole` | Assumed by the hub role to list org accounts cross-account |
+
+---
+
 ## Reference
 
 - [Kentik KB: Metadata Configuration](https://kb.kentik.com/docs/metadata-configuration-aws)
