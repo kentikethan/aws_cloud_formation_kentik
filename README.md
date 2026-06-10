@@ -1,9 +1,10 @@
 # Kentik AWS Metadata Collection — CloudFormation Deployment
 
-Deploys the Kentik IAM roles and policies across AWS accounts. Two architectures are supported:
+Deploys the Kentik IAM roles and policies across AWS accounts. Three architectures are supported:
 
 - **Standard** — Kentik connects directly to each account. Use this when you have one account or don't need a centralized hub.
-- **Nested (Hub/Spoke)** — Kentik connects to one hub account, which assumes roles in each spoke account. Use this for multi-account environments.
+- **Nested (Hub/Spoke)** — Kentik connects to one hub account, which assumes roles in each spoke account. Use this for multi-account environments where the hub account is the AWS Organizations management account.
+- **Nested (Hub/Spoke, Non-Org Account)** — Same as above, but the hub account is not the Organizations management account. Requires an additional role in the management account to delegate `organizations:ListAccounts`.
 
 ---
 
