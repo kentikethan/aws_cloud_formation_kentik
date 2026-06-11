@@ -1,0 +1,91 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Kentik Metadata Collection - Organization Resource-Based Delegation Policy.
+  Deploys an AWS Organizations resource-based delegation policy in the
+  Organizations management account that delegates the read-only
+  organizations:ListAccounts action to the Kentik hub account. This avoids
+  creating any assumable IAM role/principal inside the management account:
+  the hub account's primary role calls organizations:ListAccounts directly
+  using its own credentials, authorized by this delegation policy.
+
+  Use this instead of kentik-org-account-cfn.yaml when the organization does
+  not want to grant the hub account the ability to assume a role in the
+  management account.
+
+  NOTE: An AWS Organization can have only ONE resource policy. If your
+  organization already has a delegation policy attached, merge the statement
+  below into the existing policy instead of deploying this stack.
+
+  Reference:
+    https://kb.kentik.com/docs/metadata-configuration-aws
+    https://docs.aws.amazon.com/organizations/latest/userguide/security_iam_resource-based-policy-examples.html
+
+# ---------------------------------------------------------------------------
+# Parameters
+# ---------------------------------------------------------------------------
+Parameters:
+  HubAccountId:
+    Type: String
+    Description: >
+      AWS Account ID of the Kentik hub (primary) account. The hub account's
+      primary role will be delegated permission to call organizations:ListAccounts.
+    AllowedPattern: "^[0-9]{12}$"
+    ConstraintDescription: Must be a valid 12-digit AWS account ID.
+
+  HubRoleName:
+    Type: String
+    Default: KentikMetadataPrimaryRole
+    Description: >
+      Name of the Kentik primary IAM role in the hub account (from the hub
+      template's PrimaryRoleName parameter). The delegation is scoped to this
+      specific role for least privilege.
+
+# ---------------------------------------------------------------------------
+# Resources
+# ---------------------------------------------------------------------------
+Resources:
+
+  # ---- Organizations Resource-Based Delegation Policy ---------------------
+  KentikOrgResourcePolicy:
+    Type: AWS::Organizations::ResourcePolicy
+    Properties:
+      Content:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: DelegateListAccountsToKentikHub
+            Effect: Allow
+            Principal:
+              AWS: !Sub "arn:aws:iam::${HubAccountId}:role/${HubRoleName}"
+            Action:
+              - organizations:ListAccounts
+              - organizations:DescribeOrganization
+            Resource: "*"
+      Tags:
+        - Key: Purpose
+          Value: KentikMetadataCollection
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+Outputs:
+  ResourcePolicyId:
+    Description: ID of the AWS Organizations resource-based delegation policy.
+    Value: !GetAtt KentikOrgResourcePolicy.Id
+    Export:
+      Name: !Sub "${AWS::StackName}-ResourcePolicyId"
+
+  ResourcePolicyArn:
+    Description: ARN of the AWS Organizations resource-based delegation policy.
+    Value: !GetAtt KentikOrgResourcePolicy.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-ResourcePolicyArn"
+
+  DelegatedHubRoleArn:
+    Description: ARN of the hub role that was delegated organizations:ListAccounts.
+    Value: !Sub "arn:aws:iam::${HubAccountId}:role/${HubRoleName}"
+
+  ManagementAccountId:
+    Description: AWS Account ID of this management account.
+    Value: !Ref AWS::AccountId
+    Export:
+      Name: !Sub "${AWS::StackName}-ManagementAccountId"
