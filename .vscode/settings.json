@@ -1,0 +1,35 @@
+{
+  // Resolve CloudFormation short-form intrinsic function tags (!Ref, !GetAtt, etc.)
+  // so the Red Hat YAML extension stops reporting "Unresolved tag" errors.
+  "yaml.customTags": [
+    "!Ref scalar",
+    "!Sub scalar",
+    "!Sub sequence",
+    "!GetAtt scalar",
+    "!GetAtt sequence",
+    "!GetAZs scalar",
+    "!ImportValue scalar",
+    "!ImportValue sequence",
+    "!Join sequence",
+    "!Split sequence",
+    "!Select sequence",
+    "!FindInMap sequence",
+    "!Base64 scalar",
+    "!Base64 mapping",
+    "!Cidr sequence",
+    "!Transform mapping",
+    "!And sequence",
+    "!Or sequence",
+    "!Not sequence",
+    "!Equals sequence",
+    "!If sequence",
+    "!Condition scalar"
+  ],
+  // Associate the Kentik CloudFormation templates with the YAML language and
+  // the AWS CloudFormation JSON schema for richer validation.
+  "yaml.schemas": {
+    "https://raw.githubusercontent.com/awslabs/goformation/master/schema/cloudformation.schema.json": [
+      "*-cfn.yaml"
+    ]
+  }
+}
