@@ -28,6 +28,13 @@ Parameters:
     Default: KentikMetadataPrimaryRole
     Description: Name of the IAM role to create in the hub account.
 
+  SecondaryRoleName:
+    Type: String
+    Default: KentikMetadataSecondaryRole
+    Description: >
+      Name of the Kentik secondary role deployed in each spoke account. The
+      primary role will only be permitted to assume roles with this exact name.
+
 # ---------------------------------------------------------------------------
 # Resources
 # ---------------------------------------------------------------------------
@@ -47,7 +54,7 @@ Resources:
           - Sid: AssumeSecondaryRoles
             Effect: Allow
             Action: sts:AssumeRole
-            Resource: "*"
+            Resource: !Sub "arn:aws:iam::*:role/${SecondaryRoleName}"
           - Sid: OrgListing
             Effect: Allow
             Action:

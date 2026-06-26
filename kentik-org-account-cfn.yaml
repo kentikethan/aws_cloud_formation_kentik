@@ -18,6 +18,13 @@ Parameters:
     AllowedPattern: "^[0-9]{12}$"
     ConstraintDescription: Must be a valid 12-digit AWS account ID.
 
+  HubRoleName:
+    Type: String
+    Default: KentikMetadataPrimaryRole
+    Description: >
+      Name of the Kentik primary role in the hub account. Only this specific
+      role will be trusted to assume the org listing role.
+
   OrgPolicyName:
     Type: String
     Default: KentikMetadataOrgPolicy
@@ -63,11 +70,9 @@ Resources:
         Statement:
           - Sid: DelegateOrgReadToHub
             Effect: Allow
-            Principal: "*"
+            Principal:
+              AWS: !Sub "arn:aws:iam::${HubAccountId}:role/${HubRoleName}"
             Action: sts:AssumeRole
-            Condition:
-              StringEquals:
-                aws:PrincipalAccount: !Ref HubAccountId
       ManagedPolicyArns:
         - !Ref KentikOrgPolicy
 
