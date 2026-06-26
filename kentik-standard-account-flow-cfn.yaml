@@ -1,0 +1,112 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >
+  Kentik Flow Collection - Standard Account Configuration.
+  Deploys the IAM policy and role for VPC Flow Log collection in a single account
+  using the Kentik standard IAM architecture. Kentik connects directly to each
+  account using this role — no hub account required.
+  For metadata collection deploy kentik-standard-account-cfn.yaml separately.
+  Reference: https://kb.kentik.com/docs/metadata-configuration-aws#standard-configuration
+
+# ---------------------------------------------------------------------------
+# Parameters
+# ---------------------------------------------------------------------------
+Parameters:
+  KentikCompanyID:
+    Type: String
+    Description: >
+      Your Kentik Company ID (the "Account #" found under Settings > Licenses
+      in the Kentik portal). Used as the ExternalId in the role trust policy.
+    AllowedPattern: ".+"
+    ConstraintDescription: KentikCompanyID must not be empty.
+
+  PolicyName:
+    Type: String
+    Default: KentikFlowPolicy
+    Description: Name of the IAM policy to create in this account.
+
+  RoleName:
+    Type: String
+    Default: KentikFlowRole
+    Description: Name of the IAM role to create in this account.
+
+  S3BucketName:
+    Type: String
+    Description: >
+      Name of the S3 bucket in this account where VPC Flow Logs are stored.
+    AllowedPattern: ".+"
+    ConstraintDescription: S3BucketName must not be empty.
+
+# ---------------------------------------------------------------------------
+# Resources
+# ---------------------------------------------------------------------------
+Resources:
+
+  # ---- IAM Policy ---------------------------------------------------------
+  KentikFlowPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: !Ref PolicyName
+      Description: >-
+        Grants Kentik read-only access to the VPC Flow Logs S3 bucket for
+        flow log collection.
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: KentikFlowLogsS3Access
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:GetBucketLocation
+              - s3:ListBucket
+            Resource:
+              - !Sub "arn:aws:s3:::${S3BucketName}"
+              - !Sub "arn:aws:s3:::${S3BucketName}/*"
+
+  # ---- IAM Role -----------------------------------------------------------
+  KentikFlowRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Ref RoleName
+      MaxSessionDuration: 3600
+      Description: >-
+        Assumed directly by Kentik's AWS account to collect VPC Flow Logs from
+        this account. No hub account is involved.
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Sid: KentikTrust
+            Effect: Allow
+            Principal:
+              AWS: arn:aws:iam::834693425129:root
+            Action: sts:AssumeRole
+            Condition:
+              StringEquals:
+                sts:ExternalId: !Ref KentikCompanyID
+              ArnEquals:
+                aws:PrincipalArn: arn:aws:iam::834693425129:role/eks-ingest-node
+      ManagedPolicyArns:
+        - !Ref KentikFlowPolicy
+
+# ---------------------------------------------------------------------------
+# Outputs
+# ---------------------------------------------------------------------------
+Outputs:
+  RoleArn:
+    Description: >
+      ARN of the Kentik flow role. Enter this in the Kentik portal when
+      configuring VPC Flow Log collection for this account.
+    Value: !GetAtt KentikFlowRole.Arn
+    Export:
+      Name: !Sub "${AWS::StackName}-RoleArn"
+
+  RoleName:
+    Description: Name of the Kentik flow IAM role.
+    Value: !Ref KentikFlowRole
+    Export:
+      Name: !Sub "${AWS::StackName}-RoleName"
+
+  AccountId:
+    Description: AWS Account ID where this stack was deployed.
+    Value: !Ref AWS::AccountId
+    Export:
+      Name: !Sub "${AWS::StackName}-AccountId"

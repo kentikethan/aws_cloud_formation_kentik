@@ -66,6 +66,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Ref PrimaryRoleName
+      MaxSessionDuration: 3600
       Description: >-
         Assumed by Kentik's AWS account to collect metadata. This role assumes
         secondary roles in spoke accounts.

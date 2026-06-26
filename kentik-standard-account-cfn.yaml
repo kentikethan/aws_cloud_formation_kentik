@@ -1,10 +1,10 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  Kentik Metadata Collection - Standard Account Configuration.
-  Deploys the IAM policy and role in a single AWS account for the Kentik
-  standard IAM architecture. Kentik connects directly to each account
-  using this role — no hub account required.
-  Deploy this template independently in every account you want Kentik to monitor.
+  Kentik Metadata Collection - Standard Account (Metadata Only).
+  Deploys the IAM policy and role for AWS metadata collection in a single account
+  using the Kentik standard IAM architecture. Kentik connects directly to each
+  account using this role — no hub account required.
+  For VPC Flow Log collection deploy kentik-standard-account-flow-cfn.yaml separately.
   Reference: https://kb.kentik.com/docs/metadata-configuration-aws#standard-configuration
 
 # ---------------------------------------------------------------------------
@@ -28,19 +28,6 @@ Parameters:
     Type: String
     Default: KentikMetadataRole
     Description: Name of the IAM role to create in this account.
-
-  S3BucketName:
-    Type: String
-    Default: ""
-    Description: >
-      (Optional) Name of an S3 bucket in this account that Kentik may need
-      access to (e.g. for VPC Flow Logs). Leave empty to skip S3 permissions.
-
-# ---------------------------------------------------------------------------
-# Conditions
-# ---------------------------------------------------------------------------
-Conditions:
-  HasS3Bucket: !Not [!Equals [!Ref S3BucketName, ""]]
 
 # ---------------------------------------------------------------------------
 # Resources
@@ -114,23 +101,13 @@ Resources:
               - networkmanager:ListAttachments
               - networkmanager:GetNetworkRoutes
             Resource: "*"
-          - !If
-            - HasS3Bucket
-            - Sid: KentikS3Access
-              Effect: Allow
-              Action:
-                - s3:Get*
-                - s3:List*
-              Resource:
-                - !Sub "arn:aws:s3:::${S3BucketName}"
-                - !Sub "arn:aws:s3:::${S3BucketName}/*"
-            - !Ref AWS::NoValue
 
   # ---- IAM Role -----------------------------------------------------------
   KentikMetadataRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Ref RoleName
+      MaxSessionDuration: 3600
       Description: >-
         Assumed directly by Kentik's AWS account to collect metadata from
         this account. No hub account is involved.

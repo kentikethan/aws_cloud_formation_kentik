@@ -1,6 +1,6 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  Kentik Metadata Collection - Spoke (Secondary) Account Setup.
+  Kentik Metadata Collection - Spoke (Secondary) Account Setup (Metadata Only).
   Deploys the IAM policy and role in each secondary/spoke account for the
   Kentik nested IAM architecture. The hub account's primary role assumes this
   role to collect metadata.
@@ -37,19 +37,6 @@ Parameters:
     Type: String
     Default: KentikMetadataSecondaryRole
     Description: Name of the IAM role to create in each spoke account.
-
-  S3BucketName:
-    Type: String
-    Default: ""
-    Description: >
-      (Optional) Name of the S3 bucket in this account that Kentik may need
-      access to (e.g. for VPC Flow Logs). Leave empty to skip S3 permissions.
-
-# ---------------------------------------------------------------------------
-# Conditions
-# ---------------------------------------------------------------------------
-Conditions:
-  HasS3Bucket: !Not [!Equals [!Ref S3BucketName, ""]]
 
 # ---------------------------------------------------------------------------
 # Resources
@@ -123,24 +110,13 @@ Resources:
               - networkmanager:ListAttachments
               - networkmanager:GetNetworkRoutes
             Resource: "*"
-          # S3 statement is only included when a bucket name is provided
-          - !If
-            - HasS3Bucket
-            - Sid: KentikS3Access
-              Effect: Allow
-              Action:
-                - s3:Get*
-                - s3:List*
-              Resource:
-                - !Sub "arn:aws:s3:::${S3BucketName}"
-                - !Sub "arn:aws:s3:::${S3BucketName}/*"
-            - !Ref AWS::NoValue
 
   # ---- IAM Role -----------------------------------------------------------
   KentikSecondaryRole:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Ref SecondaryRoleName
+      MaxSessionDuration: 3600
       Description: >-
         Assumed by the Kentik hub account's primary role to collect metadata
         from this spoke account.

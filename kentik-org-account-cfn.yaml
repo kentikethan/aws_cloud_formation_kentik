@@ -62,6 +62,7 @@ Resources:
     Type: AWS::IAM::Role
     Properties:
       RoleName: !Ref OrgRoleName
+      MaxSessionDuration: 3600
       Description: >-
         Assumed by the Kentik hub account's primary role to list AWS Organization
         accounts when the hub is not the management account.
