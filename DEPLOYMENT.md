@@ -178,6 +178,8 @@ Deployed once in the **central logging account** — the account that owns the r
 
 Your Kentik Hub account already exists. This step deploys the `KentikMetadataPrimaryRole` IAM role into it so that Kentik's AWS account can assume it and reach spoke accounts.
 
+> **Note on `--region`:** IAM is a global AWS service — the role created here works in every region automatically. The `--region` flag only controls where CloudFormation stores the stack state (events, outputs). Pick any region; `us-east-1` is used here as a convention. You only need to run this once.
+
 ```bash
 aws cloudformation deploy \
   --profile <kentik-hub-account-profile> \
@@ -226,19 +228,82 @@ Note the `RoleArn` and `AccountId` values from the output.
 
 ## Step 2 — Create Kentik IAM Roles in Spoke Accounts via StackSets
 
-Your spoke accounts already exist. This step deploys the `KentikMetadataSecondaryRole` IAM role into each of them. StackSets lets you push into multiple accounts and regions in a single operation.
+Your spoke accounts already exist. This step deploys the `KentikMetadataSecondaryRole` IAM role into each of them.
 
-> **Where these commands run:** All StackSet commands (`create-stack-set`, `create-stack-instances`) are run **from the management (master/root) account**, or from a delegated administrator account if you've configured one. The management account acts as the StackSet administrator and CloudFormation handles cross-account deployment into each spoke account you list.
+> **Where these commands run:** All StackSet commands run **from the management (master/root) account**. CloudFormation handles cross-account deployment into each target spoke account.
 
-> **StackSets self-managed permissions:** Since this deployment does not rely on AWS Organizations for account discovery, use the **self-managed permissions** model. This requires:
-> - `AWSCloudFormationStackSetAdministrationRole` in the management account
-> - `AWSCloudFormationStackSetExecutionRole` in each spoke account (trusting the management account)
->
-> See [AWS docs on self-managed StackSets](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-prereqs-self-managed.html) for setup steps if these roles don't exist yet.
+> **Note on `--regions us-east-1`:** Since only IAM roles are being created (global service), specifying a single region is correct. The role works across all regions in each spoke account. You do not need to repeat this for multiple regions.
 
-> **Spoke account list:** The spoke account IDs here are the same accounts registered with Kentik during POC onboarding. Kentik stores this list on their side — the IAM roles deployed here must exist in every account Kentik was told to monitor.
+There are two ways to target accounts depending on your environment. Choose the one that fits.
 
-**Create the StackSet** (run once from the management account):
+---
+
+### Option A — Organizations-integrated (recommended for large deployments)
+
+Use this if you have AWS Organizations and want CloudFormation to pull the account list automatically. You target an OU or the org root — no need to list individual account IDs.
+
+**First, enable trusted access** between CloudFormation and Organizations (one-time, in the management account):
+
+```bash
+aws cloudformation activate-organizations-access \
+  --profile <management-account-profile>
+```
+
+**Create the StackSet with service-managed permissions:**
+
+```bash
+aws cloudformation create-stack-set \
+  --profile <management-account-profile> \
+  --stack-set-name kentik-metadata-spoke \
+  --template-body file://kentik-spoke-account-cfn.yaml \
+  --capabilities CAPABILITY_NAMED_IAM \
+  --permission-model SERVICE_MANAGED \
+  --auto-deployment Enabled=true,RetainStacksOnAccountRemoval=false \
+  --parameters \
+    ParameterKey=HubAccountId,ParameterValue=<kentik-hub-account-id>
+```
+
+**Deploy to all accounts in an OU:**
+
+```bash
+aws cloudformation create-stack-instances \
+  --profile <management-account-profile> \
+  --stack-set-name kentik-metadata-spoke \
+  --deployment-targets OrganizationalUnitIds=ou-xxxx-xxxxxxxx \
+  --regions us-east-1
+```
+
+**Or deploy to the entire organization root:**
+
+```bash
+aws cloudformation create-stack-instances \
+  --profile <management-account-profile> \
+  --stack-set-name kentik-metadata-spoke \
+  --deployment-targets RootId=r-xxxx \
+  --regions us-east-1
+```
+
+With `--auto-deployment Enabled=true`, any new account added to the OU is automatically provisioned with the Kentik role — no manual step required.
+
+> To find your OU ID or root ID: AWS Console → AWS Organizations → AWS accounts, or run:
+> ```bash
+> aws organizations list-roots --profile <management-account-profile>
+> aws organizations list-organizational-units-for-parent --parent-id r-xxxx --profile <management-account-profile>
+> ```
+
+---
+
+### Option B — Self-managed (small deployments / no Organizations)
+
+Use this if you have a small, fixed list of spoke accounts. Account IDs are passed explicitly.
+
+**Prerequisites:**
+- `AWSCloudFormationStackSetAdministrationRole` must exist in the management account
+- `AWSCloudFormationStackSetExecutionRole` must exist in each spoke account (trusting the management account)
+
+See [AWS self-managed StackSets setup](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-prereqs-self-managed.html) if these roles don't exist yet.
+
+**Create the StackSet:**
 
 ```bash
 aws cloudformation create-stack-set \
@@ -247,53 +312,49 @@ aws cloudformation create-stack-set \
   --template-body file://kentik-spoke-account-cfn.yaml \
   --capabilities CAPABILITY_NAMED_IAM \
   --parameters \
-    ParameterKey=HubAccountId,ParameterValue=<hub-account-id>
+    ParameterKey=HubAccountId,ParameterValue=<kentik-hub-account-id>
 ```
 
-Or with a parameters file `spoke-params.json`:
-
-```json
-[
-  {
-    "ParameterKey": "HubAccountId",
-    "ParameterValue": "111122223333"
-  }
-]
-```
-
-**Deploy stack instances to spoke accounts:**
+**Deploy to explicit account list:**
 
 ```bash
 aws cloudformation create-stack-instances \
   --profile <management-account-profile> \
   --stack-set-name kentik-metadata-spoke \
   --accounts 111122223333 444455556666 777788889999 \
-  --regions us-east-1 \
-  --parameter-overrides file://spoke-params.json
+  --regions us-east-1
 ```
 
-**Add or remove accounts later:**
+---
+
+### Adding or removing accounts later
 
 ```bash
-# Add new accounts
+# Add accounts (works for both Option A and B)
 aws cloudformation create-stack-instances \
+  --profile <management-account-profile> \
   --stack-set-name kentik-metadata-spoke \
   --accounts 222233334444 \
   --regions us-east-1
 
-# Remove an account
+# Remove accounts
 aws cloudformation delete-stack-instances \
+  --profile <management-account-profile> \
   --stack-set-name kentik-metadata-spoke \
   --accounts 333344445555 \
   --regions us-east-1 \
   --no-retain-stacks
 ```
 
+> **Spoke account list and Kentik:** The accounts targeted here must match the accounts registered with Kentik during POC onboarding. Kentik stores that list on their side — roles must exist in every account Kentik was told to monitor.
+
 ---
 
 ## Step 3 — Create Kentik IAM Role in Central Logging Account
 
 Your central logging account already exists and owns the flow log S3 buckets. This step deploys the `KentikFlowRole` IAM role into it so that Kentik can read flow logs directly from those buckets.
+
+> **Note on `--region`:** Same as step 1 — IAM is global. The region only determines where CloudFormation stores the stack state. Run this once in any region.
 
 Create `flow-params.json`:
 
