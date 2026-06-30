@@ -50,7 +50,7 @@ Resources:
       ManagedPolicyName: !Ref SecondaryPolicyName
       Description: >-
         Grants Kentik read-only access to AWS metadata per kb.kentik.com/docs/aws-endpoints-list.
-        Covers EC2, DirectConnect, ELB, IAM, Network Firewall, Network Manager, and optional CloudWatch metrics.
+        Covers EC2, DirectConnect, ELB, IAM, Network Manager, and optional CloudWatch metrics.
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -97,12 +97,6 @@ Resources:
               - elasticloadbalancing:DescribeLoadBalancers
               # IAM
               - iam:ListAccountAliases
-              # Network Firewall
-              - network-firewall:ListFirewalls
-              - network-firewall:DescribeFirewall
-              - network-firewall:ListFirewallPolicies
-              - network-firewall:DescribeFirewallPolicy
-              - network-firewall:DescribeRuleGroup
               # Network Manager
               - networkmanager:ListCoreNetworks
               - networkmanager:GetCoreNetwork
