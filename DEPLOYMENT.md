@@ -9,9 +9,9 @@ This guide covers prerequisites, full parameter reference, deployment commands w
 1. [Architecture Deep Dive](#architecture-deep-dive)
 2. [Templates Reference](#templates-reference)
 3. [Prerequisites](#prerequisites)
-4. [Step 1 — Hub Account](#step-1--hub-account)
-5. [Step 2 — Spoke Accounts via StackSets](#step-2--spoke-accounts-via-stacksets)
-6. [Step 3 — Central Logging Account (Flow Logs)](#step-3--central-logging-account-flow-logs)
+4. [Step 1 — Create Kentik IAM Role in Hub Account](#step-1--create-kentik-iam-role-in-hub-account)
+5. [Step 2 — Create Kentik IAM Roles in Spoke Accounts via StackSets](#step-2--create-kentik-iam-roles-in-spoke-accounts-via-stacksets)
+6. [Step 3 — Create Kentik IAM Role in Central Logging Account](#step-3--create-kentik-iam-role-in-central-logging-account)
 7. [Step 4 — Kentik Portal Configuration](#step-4--kentik-portal-configuration)
 8. [Security Design Notes](#security-design-notes)
 9. [Customization](#customization)
@@ -30,8 +30,8 @@ Kentik AWS Account (834693425129)
         │
         │  sts:AssumeRole + ExternalId + PrincipalArn condition
         ▼
-Hub Account
-KentikMetadataPrimaryRole
+Kentik Hub Account (existing)
+KentikMetadataPrimaryRole  ← IAM role created by kentik-hub-account-cfn.yaml
   └── Policy: sts:AssumeRole on arn:aws:iam::*:role/${SecondaryRoleName}
         │
         │  sts:AssumeRole
@@ -89,7 +89,7 @@ Both `KentikMetadataPrimaryRole` (hub) and `KentikFlowRole` (logging account) ap
 
 ### `kentik-hub-account-cfn.yaml`
 
-Deployed once in the designated hub account. Creates:
+Deployed once into your existing Kentik Hub account. Creates the IAM roles — it does not create the account itself. Creates:
 - **`KentikMetadataPrimaryRole`** — trusted by Kentik's account; can assume secondary roles in any spoke account
 - **`KentikMetadataPrimaryPolicy`** — `sts:AssumeRole` on `arn:aws:iam::*:role/${SecondaryRoleName}`
 
@@ -104,9 +104,9 @@ Deployed once in the designated hub account. Creates:
 
 | Output | Description |
 |---|---|
-| `RoleArn` | ARN of the hub role — enter this in the Kentik portal |
-| `RoleName` | Name of the hub role |
-| `AccountId` | Hub account ID — required as input for spoke template |
+| `RoleArn` | ARN of the Kentik hub role — enter this in the Kentik portal |
+| `RoleName` | Name of the Kentik hub role |
+| `AccountId` | Kentik Hub account ID — required as input for the spoke template |
 
 ---
 
@@ -167,20 +167,20 @@ Deployed once in the **central logging account** — the account that owns the r
 | Item | Where to find it |
 |---|---|
 | Kentik Company ID | Kentik portal → Settings → Licenses → "Account #" field |
-| Hub account ID | From your account list; you decide which account is hub |
+| Kentik Hub account ID | Your existing AWS account designated as the Kentik Hub |
 | Spoke account IDs | Your manual list of accounts Kentik should monitor |
 | Central logging account ID | The account owning the flow log S3 buckets |
 | S3 bucket names (flow logs) | S3 console in the logging account |
 
 ---
 
-## Step 1 — Hub Account
+## Step 1 — Create Kentik IAM Role in Hub Account
 
-Deploy the hub role in your designated hub account.
+Your Kentik Hub account already exists. This step deploys the `KentikMetadataPrimaryRole` IAM role into it so that Kentik's AWS account can assume it and reach spoke accounts.
 
 ```bash
 aws cloudformation deploy \
-  --profile <hub-account-profile> \
+  --profile <kentik-hub-account-profile> \
   --template-file kentik-hub-account-cfn.yaml \
   --stack-name kentik-metadata-hub \
   --capabilities CAPABILITY_NAMED_IAM \
@@ -202,7 +202,7 @@ Or with a parameters file `hub-params.json`:
 
 ```bash
 aws cloudformation deploy \
-  --profile <hub-account-profile> \
+  --profile <kentik-hub-account-profile> \
   --template-file kentik-hub-account-cfn.yaml \
   --stack-name kentik-metadata-hub \
   --capabilities CAPABILITY_NAMED_IAM \
@@ -214,7 +214,7 @@ aws cloudformation deploy \
 
 ```bash
 aws cloudformation describe-stacks \
-  --profile <hub-account-profile> \
+  --profile <kentik-hub-account-profile> \
   --stack-name kentik-metadata-hub \
   --region us-east-1 \
   --query "Stacks[0].Outputs"
@@ -224,9 +224,9 @@ Note the `RoleArn` and `AccountId` values from the output.
 
 ---
 
-## Step 2 — Spoke Accounts via StackSets
+## Step 2 — Create Kentik IAM Roles in Spoke Accounts via StackSets
 
-Deploy the secondary role into all spoke accounts. StackSets lets you push to multiple accounts and regions in a single operation.
+Your spoke accounts already exist. This step deploys the `KentikMetadataSecondaryRole` IAM role into each of them. StackSets lets you push into multiple accounts and regions in a single operation.
 
 > **Where these commands run:** All StackSet commands (`create-stack-set`, `create-stack-instances`) are run **from the management (master/root) account**, or from a delegated administrator account if you've configured one. The management account acts as the StackSet administrator and CloudFormation handles cross-account deployment into each spoke account you list.
 
@@ -291,9 +291,9 @@ aws cloudformation delete-stack-instances \
 
 ---
 
-## Step 3 — Central Logging Account (Flow Logs)
+## Step 3 — Create Kentik IAM Role in Central Logging Account
 
-Deploy the flow role in the account that owns the centralized S3 buckets.
+Your central logging account already exists and owns the flow log S3 buckets. This step deploys the `KentikFlowRole` IAM role into it so that Kentik can read flow logs directly from those buckets.
 
 Create `flow-params.json`:
 
