@@ -228,9 +228,17 @@ Note the `RoleArn` and `AccountId` values from the output.
 
 Deploy the secondary role into all spoke accounts. StackSets lets you push to multiple accounts and regions in a single operation.
 
-> **StackSets requires:** CloudFormation StackSets service-linked roles or self-managed permissions must be configured. See [AWS docs on StackSets prerequisites](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-prereqs.html).
+> **Where these commands run:** All StackSet commands (`create-stack-set`, `create-stack-instances`) are run **from the management (master/root) account**, or from a delegated administrator account if you've configured one. The management account acts as the StackSet administrator and CloudFormation handles cross-account deployment into each spoke account you list.
 
-**Create the StackSet** (run once from the management or delegated admin account):
+> **StackSets self-managed permissions:** Since this deployment does not rely on AWS Organizations for account discovery, use the **self-managed permissions** model. This requires:
+> - `AWSCloudFormationStackSetAdministrationRole` in the management account
+> - `AWSCloudFormationStackSetExecutionRole` in each spoke account (trusting the management account)
+>
+> See [AWS docs on self-managed StackSets](https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/stacksets-prereqs-self-managed.html) for setup steps if these roles don't exist yet.
+
+> **Spoke account list:** The spoke account IDs here are the same accounts registered with Kentik during POC onboarding. Kentik stores this list on their side — the IAM roles deployed here must exist in every account Kentik was told to monitor.
+
+**Create the StackSet** (run once from the management account):
 
 ```bash
 aws cloudformation create-stack-set \

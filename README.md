@@ -11,7 +11,7 @@ Deploys Kentik IAM roles and policies across AWS accounts for two collection typ
 
 ### Metadata Collection — Hub/Spoke
 
-Kentik connects to one hub account, which assumes roles in each spoke account to collect metadata. Spoke accounts are provided as a manual list — no AWS Organizations required.
+Kentik connects to one hub account, which assumes roles in each spoke account to collect metadata. The spoke account list is registered with Kentik during POC onboarding — no `organizations:ListAccounts` permission is required.
 
 ```
 Kentik AWS Account (834693425129)
@@ -70,7 +70,7 @@ Kentik AWS Account (834693425129)
 - AWS CLI configured with profiles for the hub account, spoke accounts, and central logging account
 - **Kentik Company ID** — found in the Kentik portal under **Settings → Licenses** (the "Account #" field)
 - **Hub account ID** — retrieved from step 1 stack outputs
-- **Spoke account IDs** — your manual list of accounts for Kentik to monitor
+- **Spoke account IDs** — the accounts registered with Kentik during POC onboarding; must match exactly
 - **S3 bucket names** — the regional centralized flow log bucket names
 
 ---
@@ -91,14 +91,18 @@ aws cloudformation deploy \
 
 ### Step 2 — Deploy Spoke Accounts via StackSets
 
+Run from the **management (master) account**. The spoke account IDs must match the accounts registered with Kentik during onboarding.
+
 ```bash
 aws cloudformation create-stack-set \
+  --profile <management-account-profile> \
   --stack-set-name kentik-metadata-spoke \
   --template-body file://kentik-spoke-account-cfn.yaml \
   --capabilities CAPABILITY_NAMED_IAM \
   --parameters ParameterKey=HubAccountId,ParameterValue=<hub-account-id>
 
 aws cloudformation create-stack-instances \
+  --profile <management-account-profile> \
   --stack-set-name kentik-metadata-spoke \
   --accounts 111122223333 444455556666 777788889999 \
   --regions us-east-1
