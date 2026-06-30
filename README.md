@@ -25,6 +25,25 @@ Three architectures are supported:
 
 ---
 
+## Customizing Permissions
+
+The metadata policy grants permissions for every AWS networking service Kentik supports. If your environment doesn't use certain services, you can remove the corresponding actions from the policy before deploying to follow least-privilege.
+
+Edit `kentik-standard-account-cfn.yaml` and/or `kentik-spoke-account-cfn.yaml` and delete any comment block and its actions that don't apply:
+
+| Comment block | Actions | Remove if… |
+|---|---|---|
+| `# CloudWatch (optional)` | `cloudwatch:ListMetrics`, `GetMetricStatistics`, `GetMetricData` | You don't need CloudWatch metrics in Kentik |
+| `# DirectConnect` | `directconnect:Describe*` | You don't use AWS Direct Connect |
+| `# Network Firewall` | `network-firewall:List*`, `Describe*` | You don't use AWS Network Firewall |
+| `# Network Manager` | `networkmanager:List*`, `Get*` | You don't use AWS Cloud WAN |
+
+The EC2 and ELB actions are required for core metadata collection and should not be removed.
+
+> **Tip:** Save a copy of any removed blocks before deploying. If you later adopt one of these services, you can add the actions back and update the stack with `aws cloudformation deploy` — no role recreation required.
+
+---
+
 ## Standard Configuration
 
 Deploy templates directly in each account you want Kentik to monitor. Metadata and flow collection use separate roles and can be deployed independently.
