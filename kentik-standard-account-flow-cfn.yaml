@@ -1,10 +1,10 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: >
-  Kentik Flow Collection - Standard Account Configuration.
-  Deploys the IAM policy and role for VPC Flow Log collection in a single account
-  using the Kentik standard IAM architecture. Kentik connects directly to each
-  account using this role — no hub account required.
-  For metadata collection deploy kentik-standard-account-cfn.yaml separately.
+  Kentik Flow Collection - Centralized Logging Account Configuration.
+  Deploys the IAM policy and role for VPC Flow Log collection from a centralized
+  S3 logging account. All spoke account flow logs are read from regional S3 buckets
+  in this account. Kentik connects directly using this role — no hub account required.
+  For metadata collection deploy kentik-hub-account-cfn.yaml and kentik-spoke-account-cfn.yaml.
   Reference: https://kb.kentik.com/docs/metadata-configuration-aws#standard-configuration
 
 # ---------------------------------------------------------------------------
@@ -29,12 +29,13 @@ Parameters:
     Default: KentikFlowRole
     Description: Name of the IAM role to create in this account.
 
-  S3BucketName:
-    Type: String
+  S3BucketNames:
+    Type: CommaDelimitedList
     Description: >
-      Name of the S3 bucket in this account where VPC Flow Logs are stored.
-    AllowedPattern: ".+"
-    ConstraintDescription: S3BucketName must not be empty.
+      Comma-separated names of the regional S3 buckets where centralized VPC Flow
+      Logs are stored. Each name must be exact — access is locked to these specific
+      buckets only, no wildcards.
+      Example: neto-rubrik-dev-us-east-1,neto-rubrik-dev-us-east-2,neto-rubrik-dev-us-west-2
 
 # ---------------------------------------------------------------------------
 # Resources
@@ -47,20 +48,30 @@ Resources:
     Properties:
       ManagedPolicyName: !Ref PolicyName
       Description: >-
-        Grants Kentik read-only access to the VPC Flow Logs S3 bucket for
-        flow log collection.
+        Grants Kentik read-only access to centralized VPC Flow Log S3 buckets.
+        Scoped to exact bucket names provided — no wildcard bucket access.
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
-          - Sid: KentikFlowLogsS3Access
+          - Sid: KentikFlowLogsBucketLevel
+            Effect: Allow
+            Action:
+              - s3:GetBucketLocation
+              - s3:ListBucket
+            Resource: !Split
+              - ","
+              - !Sub
+                - "arn:aws:s3:::${Joined}"
+                - Joined: !Join [",arn:aws:s3:::", !Ref S3BucketNames]
+          - Sid: KentikFlowLogsObjectLevel
             Effect: Allow
             Action:
               - s3:GetObject
-              - s3:GetBucketLocation
-              - s3:ListBucket
-            Resource:
-              - !Sub "arn:aws:s3:::${S3BucketName}"
-              - !Sub "arn:aws:s3:::${S3BucketName}/*"
+            Resource: !Split
+              - ","
+              - !Sub
+                - "arn:aws:s3:::${Joined}/*"
+                - Joined: !Join ["/*,arn:aws:s3:::", !Ref S3BucketNames]
 
   # ---- IAM Role -----------------------------------------------------------
   KentikFlowRole:
@@ -70,7 +81,7 @@ Resources:
       MaxSessionDuration: 3600
       Description: >-
         Assumed directly by Kentik's AWS account to collect VPC Flow Logs from
-        this account. No hub account is involved.
+        centralized S3 buckets in this account. No hub account is involved.
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -106,7 +117,7 @@ Outputs:
       Name: !Sub "${AWS::StackName}-RoleName"
 
   AccountId:
-    Description: AWS Account ID where this stack was deployed.
+    Description: AWS Account ID where this stack was deployed (central logging account).
     Value: !Ref AWS::AccountId
     Export:
       Name: !Sub "${AWS::StackName}-AccountId"
