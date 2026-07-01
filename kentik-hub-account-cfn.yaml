@@ -46,8 +46,8 @@ Resources:
     Properties:
       ManagedPolicyName: !Ref PrimaryPolicyName
       Description: >-
-        Allows Kentik's primary role to assume secondary roles in spoke accounts
-        and list AWS Organization accounts.
+        Allows Kentik's primary role to assume secondary roles in spoke accounts.
+        Account list is provided manually — no AWS Organizations access required.
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
@@ -55,11 +55,6 @@ Resources:
             Effect: Allow
             Action: sts:AssumeRole
             Resource: !Sub "arn:aws:iam::*:role/${SecondaryRoleName}"
-          - Sid: OrgListing
-            Effect: Allow
-            Action:
-              - organizations:ListAccounts
-            Resource: "*"
 
   # ---- IAM Role -----------------------------------------------------------
   KentikPrimaryRole:

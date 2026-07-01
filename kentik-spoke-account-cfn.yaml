@@ -50,33 +50,40 @@ Resources:
       ManagedPolicyName: !Ref SecondaryPolicyName
       Description: >-
         Grants Kentik read-only access to AWS metadata per kb.kentik.com/docs/aws-endpoints-list.
-        Covers EC2, DirectConnect, ELB, IAM, Network Firewall, Network Manager, and optional CloudWatch metrics.
+        Covers EC2, DirectConnect, ELB, IAM, Network Manager, and optional CloudWatch metrics.
       PolicyDocument:
         Version: "2012-10-17"
         Statement:
           - Sid: KentikMetadataReadOnly
             Effect: Allow
             Action:
-              # CloudWatch (optional)
+              # CloudWatch
               - cloudwatch:ListMetrics
               - cloudwatch:GetMetricStatistics
               - cloudwatch:GetMetricData
+              - cloudwatch:DescribeAlarms
+              - cloudwatch:DescribeAlarmsForMetric
+              - cloudwatch:DescribeInsightRules
               # DirectConnect
+              - directconnect:DescribeConnections
               - directconnect:DescribeDirectConnectGateways
+              - directconnect:DescribeDirectConnectGatewayAssociations
+              - directconnect:DescribeVirtualGateways
               - directconnect:DescribeVirtualInterfaces
               - directconnect:DescribeLags
-              - directconnect:DescribeConnections
               # EC2
               - ec2:DescribeAvailabilityZones
               - ec2:DescribeCustomerGateways
               - ec2:DescribeFlowLogs
-              - ec2:DescribeInternetGateways
+              - ec2:DescribeInstanceStatus
               - ec2:DescribeInstances
+              - ec2:DescribeInternetGateways
               - ec2:DescribeNatGateways
               - ec2:DescribeNetworkAcls
               - ec2:DescribeNetworkInterfaces
               - ec2:DescribeManagedPrefixLists
               - ec2:DescribePrefixLists
+              - ec2:DescribeRegions
               - ec2:DescribeRouteTables
               - ec2:DescribeSecurityGroups
               - ec2:DescribeSubnets
@@ -84,25 +91,23 @@ Resources:
               - ec2:DescribeTransitGatewayAttachments
               - ec2:DescribeTransitGatewayVpcAttachments
               - ec2:DescribeTransitGatewayRouteTables
-              - ec2:DescribeTransitGatewayConnects
-              - ec2:DescribeTransitGatewayConnectPeers
               - ec2:DescribeVpcs
               - ec2:DescribeVpcEndpoints
               - ec2:DescribeVpcPeeringConnections
               - ec2:DescribeVpnConnections
               - ec2:DescribeVpnGateways
-              - ec2:SearchTransitGatewayRoutes
               - ec2:GetManagedPrefixListEntries
+              - ec2:SearchTransitGatewayRoutes
               # ELB
               - elasticloadbalancing:DescribeLoadBalancers
+              - elasticloadbalancing:DescribeLoadBalancerAttributes
+              - elasticloadbalancing:DescribeTargetGroups
+              - elasticloadbalancing:DescribeTargetHealth
+              - elasticloadbalancing:DescribeListeners
+              - elasticloadbalancing:DescribeRules
+              - elasticloadbalancing:DescribeTags
               # IAM
               - iam:ListAccountAliases
-              # Network Firewall
-              - network-firewall:ListFirewalls
-              - network-firewall:DescribeFirewall
-              - network-firewall:ListFirewallPolicies
-              - network-firewall:DescribeFirewallPolicy
-              - network-firewall:DescribeRuleGroup
               # Network Manager
               - networkmanager:ListCoreNetworks
               - networkmanager:GetCoreNetwork
